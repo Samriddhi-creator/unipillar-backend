@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  mobile    String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+model SeatRecord {
+  id           String   @id @default(cuid())
+  institute    String
+  program      String
+  quota        String
+  seatType     String
+  gender       String
+  year         Int
+  openingRank  Int
+  closingRank  Int
+  round        Int
+  isPwd        String
+  createdAt    DateTime @default(now())
+
+  @@unique([institute, program, quota, seatType, gender, year, round, isPwd])
+}
+model CollegeFee {
+  id               String @id @default(cuid())
+  collegeName      String
+  collegeShortName String @unique
+  fees             Int
+  instType         String
+}
+
+model PredictedCutoff {
+  id                          String   @id @default(cuid())
+
+  institute                   String
+  collegeState                String
+  branchShortcut              String
+  degreeType                  String
+
+  quota                       String
+  seatType                    String
+  gender                      String
+
+  predictedClosingRank2026    Int
+
+  instituteType               String
+
+  globalPrestigeIndex         Int
+  globalBranchPopularity      Int
+
+  createdAt                   DateTime @default(now())
+
+  @@index([quota])
+  @@index([seatType])
+  @@index([gender])
+  @@index([collegeState])
+  @@index([predictedClosingRank2026])
+}

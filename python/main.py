@@ -2,60 +2,70 @@ import sys
 import json
 import pandas as pd
 
-from fetch_eligible import fetch_eligible_colleges
 from ranking_engine import generate_personalized_rankings
 
+# =========================================
+# READ INPUT
+# =========================================
 
-def main():
-    try:
-        user_profile = json.loads(sys.argv[1])
+raw_input = sys.stdin.read()
 
-        weights = json.loads(sys.argv[2])
+print("INPUT RECEIVED", file=sys.stderr)
 
-        dataset_path = sys.argv[3]
+input_data = json.loads(raw_input)
 
-        # -----------------------------------
-        # FETCH ELIGIBLE COLLEGES
-        # -----------------------------------
+# =========================================
+# EXTRACT DATA
+# =========================================
 
-        eligible = fetch_eligible_colleges(
-            dataset_path,
-            user_profile
-        )
+profile = input_data.get("profile", {})
+weights = input_data.get("weights", {})
+branches = input_data.get("branches", [])
+dataset = input_data.get("dataset", [])
 
-        if eligible.empty:
-            raise Exception("No eligible colleges found")
+# =========================================
+# DATAFRAME
+# =========================================
 
-        # -----------------------------------
-        # GENERATE RANKINGS
-        # -----------------------------------
+df = pd.DataFrame(dataset)
 
-        result = generate_personalized_rankings(
-            eligible,
-            {
-                "home_state": user_profile["home_state"]
-            },
-            weights
-        )
+print(df.columns.tolist(), file=sys.stderr)
 
-        if result.empty:
-            raise Exception("No ranking results generated")
+# =========================================
+# PROFILE NORMALIZATION
+# =========================================
 
-        # -----------------------------------
-        # CONVERT TO JSON
-        # -----------------------------------
+profile["ranks"] = {
+    "main_crl": profile.get("mainCategoryRank", 0),
+    "main_cat": profile.get("mainCategoryRank", 0),
+    "adv_crl": profile.get("advCategoryRank", 0),
+    "adv_cat": profile.get("advCategoryRank", 0)
+}
 
-        final = result.fillna("").to_dict(orient="records")
+profile["category"] = profile.get("category", "OPEN")
+profile["gender"] = profile.get("gender", "Gender-Neutral")
+profile["home_state"] = profile.get("homeState", "")
 
-        print(json.dumps(final))
+# =========================================
+# RUN ENGINE
+# =========================================
 
-        sys.exit(0)
+result = generate_personalized_rankings(
+    df,
+    {
+        "branches": branches,
+        "home_state": profile["homeState"]
+    },
+    {
+        "branch": weights["branch"],
+        "prestige": weights["college"],
+        "location": weights["hometown"]
+    },
+    profile["mainCategoryRank"]
+)
 
-    except Exception as e:
-        print(str(e), file=sys.stderr)
+# =========================================
+# OUTPUT JSON
+# =========================================
 
-        sys.exit(1)
-
-
-if __name__ == "__main__":
-    main()
+print(result.to_json(orient="records"))

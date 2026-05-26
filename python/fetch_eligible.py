@@ -59,7 +59,7 @@ def fetch_eligible_colleges(db_path, user_profile):
     # LOAD DATA
     # -----------------------------------------------------
 
-    df = pd.read_csv(db_path)
+    df = pd.DataFrame(raw_data)
 
     # -----------------------------------------------------
     # USER DATA

@@ -14,23 +14,27 @@ model User {
   mobile    String   @unique
   password  String
   createdAt DateTime @default(now())
+
+  recommendationHistories RecommendationHistory[]
 }
+
 model SeatRecord {
-  id           String   @id @default(cuid())
-  institute    String
-  program      String
-  quota        String
-  seatType     String
-  gender       String
-  year         Int
-  openingRank  Int
-  closingRank  Int
-  round        Int
-  isPwd        String
-  createdAt    DateTime @default(now())
+  id          String   @id @default(cuid())
+  institute   String
+  program     String
+  quota       String
+  seatType    String
+  gender      String
+  year        Int
+  openingRank Int
+  closingRank Int
+  round       Int
+  isPwd       String
+  createdAt   DateTime @default(now())
 
   @@unique([institute, program, quota, seatType, gender, year, round, isPwd])
 }
+
 model CollegeFee {
   id               String @id @default(cuid())
   collegeName      String
@@ -39,30 +43,82 @@ model CollegeFee {
   instType         String
 }
 
-model PredictedCutoff {
-  id                          String   @id @default(cuid())
+model CutoffPrediction {
+  id                       String   @id
+  institute                String
+  branchShortcut           String
+  degreeType               String?
+  quota                    String?
+  seatType                 String?
+  gender                   String?
+  collegeState             String?
+  predictedClosingRank2026 Int
+  instituteType            String?
+  globalPrestigeIndex      Float?
+  globalBranchPopularity   Float?
+  createdAt                DateTime @default(now())
+}
 
-  institute                   String
-  collegeState                String
-  branchShortcut              String
-  degreeType                  String
+model PreferenceProfile {
+  id String @id @default(cuid())
 
-  quota                       String
-  seatType                    String
-  gender                      String
+  mainCategoryRank Int
 
-  predictedClosingRank2026    Int
+  advCategoryRank Int?
 
-  instituteType               String
+  category String
 
-  globalPrestigeIndex         Int
-  globalBranchPopularity      Int
+  homeState String
 
-  createdAt                   DateTime @default(now())
+  gender String
 
-  @@index([quota])
-  @@index([seatType])
-  @@index([gender])
-  @@index([collegeState])
-  @@index([predictedClosingRank2026])
+  hometownWeight Int
+
+  collegeWeight Int
+
+  branchWeight Int
+
+  preferredBranches Json
+
+  createdAt DateTime @default(now())
+
+  generatedLists GeneratedList[]
+
+  histories RecommendationHistory[]
+}
+
+model GeneratedList {
+  id String @id @default(cuid())
+
+  profileId String
+
+  generatedResults Json
+
+  totalResults Int
+
+  createdAt DateTime @default(now())
+
+  profile PreferenceProfile @relation(fields: [profileId], references: [id])
+
+  histories RecommendationHistory[]
+}
+
+model RecommendationHistory {
+  id String @id @default(cuid())
+
+  userId String?
+
+  profileId String?
+
+  generatedListId String
+
+  pdfUrl String?
+
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  profile PreferenceProfile? @relation(fields: [profileId], references: [id])
+
+  generatedList GeneratedList @relation(fields: [generatedListId], references: [id])
 }

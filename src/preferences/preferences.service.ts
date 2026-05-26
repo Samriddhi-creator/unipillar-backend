@@ -1,280 +1,199 @@
-import {
-    Injectable,
-    BadRequestException,
-} from '@nestjs/common';
-
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../prisma/prisma.service';
 import { spawn } from 'child_process';
-
-import * as path from 'path';
-
-import * as fs from 'fs';
-
-import PDFDocument from 'pdfkit';
+import { GeneratePreferencesDto } from './generate-preferences.dto';
 
 @Injectable()
 export class PreferencesService {
-    async generatePreferenceList(data: any) {
-        try {
-            // --------------------------------
-            // USER PROFILE
-            // --------------------------------
+    constructor(private prisma: PrismaService) { }
 
-            const userProfile = {
-                category: data.category,
+    async generateRecommendations(
+        body: GeneratePreferencesDto,
+    ): Promise<any> {
 
-                gender: data.gender,
+        // =========================================
+        // 1. FETCH DATA FROM POSTGRESQL
+        // =========================================
+        const dataset = await this.prisma.cutoffPrediction.findMany();
 
-                home_state: data.homeState,
+        // =========================================
+        // 2. NORMALIZE DATASET FOR PYTHON ENGINE
+        // =========================================
+        const cleanDataset = dataset.map((d: any) => ({
+            Institute: d.institute,
+            college_state: d.collegeState,
+            branch_shortcut: d.branchShortcut,
+            degree_type: d.degreeType,
+            Quota: d.quota,
+            "Seat Type": d.seatType,
+            Gender: d.gender,
+            predicted_closing_rank_2026:
+                d.predictedClosingRank2026,
+            institute_type: d.instituteType,
+            Global_Prestige_Index:
+                d.globalPrestigeIndex,
+            Global_Branch_Popularity:
+                d.globalBranchPopularity,
+        }));
 
-                pwd: data.pwd === 'Yes',
+        // =========================================
+        // 3. RUN PYTHON ENGINE
+        // =========================================
+        return new Promise((resolve, reject) => {
 
-                ranks: {
-                    main_crl: Number(data.jeeMainsRank),
-
-                    main_cat: Number(data.jeeMainsRank),
-
-                    adv_crl: Number(data.jeeAdvancedRank),
-
-                    adv_cat: Number(data.jeeAdvancedRank),
-                },
-            };
-
-            // --------------------------------
-            // WEIGHTS
-            // --------------------------------
-
-            const weights = {
-                branch: Number(data.weights.branch),
-
-                prestige: Number(data.weights.college),
-
-                location: Number(data.weights.hometown),
-            };
-
-            // --------------------------------
-            // PATHS
-            // --------------------------------
-
-            const pythonFile = path.join(
-                process.cwd(),
+            const py = spawn(
                 'python',
-                'main.py',
+                ['-u', 'python/main.py'],
             );
 
-            const datasetPath = path.join(
-                process.cwd(),
-                'data',
-                'JOSAA_2026_Predicted_Cutoffs.csv',
-            );
+            let output = '';
+            let error = '';
 
-            // --------------------------------
-            // RUN PYTHON
-            // --------------------------------
-
-            const result: any = await new Promise(
-                (resolve, reject) => {
-                    const python = spawn(
-                        'python',
-                        [
-                            pythonFile,
-                            JSON.stringify(userProfile),
-                            JSON.stringify(weights),
-                            datasetPath,
-                        ],
-                        {
-                            cwd: path.join(process.cwd(), 'python'),
-                        },
-                    );
-
-
-                    let output = '';
-
-                    let error = '';
-
-                    python.stdout.on('data', (data) => {
-                        output += data.toString();
-                    });
-
-                    python.stderr.on('data', (data) => {
-                        error += data.toString();
-                    });
-
-                    python.on('close', (code) => {
-                        if (code !== 0) {
-                            reject(error);
-
-                            return;
-                        }
-
-                        try {
-                            resolve(JSON.parse(output));
-                        } catch (err) {
-                            reject(err);
-                        }
-                    });
-                },
-            );
-
-            // --------------------------------
-            // GENERATE PDF
-            // --------------------------------
-
-            const fileName = `recommendation-${Date.now()}.pdf`;
-
-            const pdfPath = path.join(
-                process.cwd(),
-                'generated',
-                fileName,
-            );
-
-            const doc = new PDFDocument({
-                margin: 40,
+            // =========================================
+            // 4. PYTHON STDOUT
+            // =========================================
+            py.stdout.on('data', (data) => {
+                output += data.toString();
             });
 
-            const stream = fs.createWriteStream(pdfPath);
+            // =========================================
+            // 5. PYTHON STDERR
+            // =========================================
+            py.stderr.on('data', (data) => {
+                error += data.toString();
 
-            doc.pipe(stream);
+                console.error(
+                    'Python Error:',
+                    data.toString(),
+                );
+            });
 
-            // --------------------------------
-            // TITLE
-            // --------------------------------
+            // =========================================
+            // 6. PROCESS END
+            // =========================================
+            py.on('close', async (code) => {
 
-            doc
-                .fontSize(24)
-                .text('UniPillar Recommendation List', {
-                    align: 'center',
+                if (code !== 0) {
+
+                    return reject({
+                        message: 'Python process failed',
+                        error,
+                        code,
+                    });
+                }
+
+                try {
+
+                    const parsed = JSON.parse(output);
+
+                    // =========================================
+                    // SAVE PROFILE
+                    // =========================================
+                    const profile =
+                        await this.prisma.preferenceProfile.create({
+                            data: {
+                                mainCategoryRank:
+                                    body.profile.mainCategoryRank,
+
+                                advCategoryRank:
+                                    body.profile.advCategoryRank,
+
+                                category:
+                                    body.profile.category,
+
+                                homeState:
+                                    body.profile.homeState,
+
+                                gender:
+                                    body.profile.gender,
+
+                                hometownWeight:
+                                    body.weights.hometown,
+
+                                collegeWeight:
+                                    body.weights.college,
+
+                                branchWeight:
+                                    body.weights.branch,
+
+                                preferredBranches:
+                                    body.branches,
+                            },
+                        });
+
+                    // =========================================
+                    // SAVE GENERATED LIST
+                    // =========================================
+                    const generatedList =
+                        await this.prisma.generatedList.create({
+                            data: {
+                                profileId: profile.id,
+
+                                generatedResults: parsed,
+
+                                totalResults: parsed.length,
+                            },
+                        });
+
+                    // =========================================
+                    // SAVE HISTORY
+                    // =========================================
+                    await this.prisma.recommendationHistory.create({
+                        data: {
+                            profileId: profile.id,
+
+                            generatedListId:
+                                generatedList.id,
+                        },
+                    });
+
+                    // =========================================
+                    // RETURN RESPONSE
+                    // =========================================
+                    resolve({
+                        success: true,
+                        count: parsed.length,
+                        profileId: profile.id,
+                        generatedListId: generatedList.id,
+                        results: parsed,
+                    });
+
+                } catch (e) {
+
+                    reject({
+                        message: 'Invalid JSON from Python',
+                        rawOutput: output,
+                    });
+                }
+            });
+
+            // =========================================
+            // 7. SEND DATA TO PYTHON
+            // =========================================
+            const payload = JSON.stringify({
+                profile: body.profile,
+                weights: body.weights,
+                branches: body.branches,
+                dataset: cleanDataset,
+            });
+
+            py.stdin.write(payload);
+
+            py.stdin.end();
+
+            // =========================================
+            // 8. SAFETY TIMEOUT
+            // =========================================
+            setTimeout(() => {
+
+                py.kill();
+
+                reject({
+                    message:
+                        'Python process timeout (30s)',
                 });
 
-            doc.moveDown();
-
-            // --------------------------------
-            // PROFILE
-            // --------------------------------
-
-            doc
-                .fontSize(16)
-                .text('Student Profile');
-
-            doc.moveDown(0.5);
-
-            doc.fontSize(12);
-
-            doc.text(`JEE Mains Rank: ${data.jeeMainsRank}`);
-
-            doc.text(
-                `JEE Advanced Rank: ${data.jeeAdvancedRank}`,
-            );
-
-            doc.text(`Category: ${data.category}`);
-
-            doc.text(`Gender: ${data.gender}`);
-
-            doc.text(`Home State: ${data.homeState}`);
-
-            doc.text(`PwD: ${data.pwd}`);
-
-            doc.moveDown();
-
-            // --------------------------------
-            // WEIGHTS
-            // --------------------------------
-
-            doc
-                .fontSize(16)
-                .text('Priority Weights');
-
-            doc.moveDown(0.5);
-
-            doc.fontSize(12);
-
-            doc.text(
-                `Hometown Locality: ${data.weights.hometown}%`,
-            );
-
-            doc.text(
-                `College Priority: ${data.weights.college}%`,
-            );
-
-            doc.text(
-                `Branch Priority: ${data.weights.branch}%`,
-            );
-
-            doc.moveDown();
-
-            // --------------------------------
-            // COLLEGES
-            // --------------------------------
-
-            doc
-                .fontSize(16)
-                .text('Recommended Colleges');
-
-            doc.moveDown();
-
-            result.slice(0, 50).forEach((college, index) => {
-                doc
-                    .fontSize(13)
-                    .text(
-                        `${index + 1}. ${college.Institute}`,
-                        {
-                            underline: true,
-                        },
-                    );
-
-                doc.fontSize(11);
-
-                doc.text(
-                    `Branch: ${college.branch_shortcut}`,
-                );
-
-                doc.text(
-                    `Institute Type: ${college.degree_type}`,
-                );
-
-                doc.text(
-                    `Quota: ${college.Quota}`,
-                );
-
-                doc.text(
-                    `Seat Type: ${college['Seat Type']}`,
-                );
-
-                doc.text(
-                    `Predicted Closing Rank: ${college.predicted_closing_rank_2026}`,
-                );
-
-                doc.text(
-                    `Utility Score: ${college.final_utility_score}`,
-                );
-
-                doc.moveDown();
-            });
-
-            doc.end();
-
-            // WAIT FOR PDF SAVE
-
-            await new Promise<void>((resolve) => {
-                stream.on('finish', () => resolve());
-            });
-
-            // --------------------------------
-            // RETURN
-            // --------------------------------
-
-            return {
-                success: true,
-
-                pdfUrl: `http://localhost:3001/generated/${fileName}`,
-
-                totalResults: result.length,
-            };
-        } catch (err) {
-            console.log(err);
-
-            throw new BadRequestException(
-                'Failed to generate recommendation PDF',
-            );
-        }
+            }, 30000);
+        });
     }
 }

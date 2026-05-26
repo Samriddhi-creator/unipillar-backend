@@ -4,8 +4,9 @@ import { AuthModule } from './auth/auth.module';
 import { JwtModule } from './jwt/jwt.module';
 import { UserModule } from './user/user.module';
 import { SeatRecordsModule } from './seat-records/seat-records.module';
-import { FeesModule } from './fees/fees.module';   // <-- add this
+import { FeesModule } from './fees/fees.module';
 import { PreferencesModule } from './preferences/preferences.module';
+import { PredictorModule } from './predictor/predictor.module';
 
 @Module({
   imports: [
@@ -14,8 +15,9 @@ import { PreferencesModule } from './preferences/preferences.module';
     JwtModule,
     UserModule,
     SeatRecordsModule,
-    FeesModule,   // <-- add this
+    FeesModule,
     PreferencesModule,
+    PredictorModule, // 👈 added correctly
   ],
 })
 export class AppModule {}

@@ -1,4 +1,11 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+
+import {
+  ThrottlerModule,
+  ThrottlerGuard,
+} from '@nestjs/throttler';
+
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtModule } from './jwt/jwt.module';
@@ -10,6 +17,13 @@ import { PredictorModule } from './predictor/predictor.module';
 
 @Module({
   imports: [
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000,
+        limit: 5,
+      },
+    ]),
+
     PrismaModule,
     AuthModule,
     JwtModule,
@@ -17,7 +31,14 @@ import { PredictorModule } from './predictor/predictor.module';
     SeatRecordsModule,
     FeesModule,
     PreferencesModule,
-    PredictorModule, // 👈 added correctly
+    PredictorModule,
+  ],
+
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
   ],
 })
 export class AppModule {}

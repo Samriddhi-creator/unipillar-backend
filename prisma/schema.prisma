@@ -13,6 +13,10 @@ model User {
   email     String   @unique
   mobile    String   @unique
   password  String
+
+  resetOtp       String?
+  resetOtpExpiry DateTime?
+
   createdAt DateTime @default(now())
 
   recommendationHistories RecommendationHistory[]

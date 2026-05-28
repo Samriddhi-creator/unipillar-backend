@@ -1,9 +1,18 @@
-import { Controller, Post, Body } from '@nestjs/common'
+import {
+  Controller,
+  Post,
+  Body,
+} from '@nestjs/common'
+
+import { Throttle } from '@nestjs/throttler'
+
 import { AuthService } from './auth.service'
 
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(
+    private authService: AuthService,
+  ) {}
 
   // ---------------- SIGNUP ----------------
   @Post('signup')
@@ -12,8 +21,44 @@ export class AuthController {
   }
 
   // ---------------- LOGIN ----------------
+  @Throttle({
+    default: {
+      limit: 10,
+      ttl: 60000,
+    },
+  })
   @Post('login')
   async login(@Body() body: any) {
     return this.authService.login(body)
+  }
+
+  // ---------------- FORGOT PASSWORD ----------------
+  @Throttle({
+    default: {
+      limit: 3,
+      ttl: 60000,
+    },
+  })
+  @Post('forgot-password')
+  async forgotPassword(@Body() body: any) {
+    return this.authService.forgotPassword(
+      body.email,
+    )
+  }
+
+  // ---------------- VERIFY OTP ----------------
+  @Post('verify-reset-otp')
+  async verifyResetOtp(@Body() body: any) {
+    return this.authService.verifyResetOtp(
+      body,
+    )
+  }
+
+  // ---------------- RESET PASSWORD ----------------
+  @Post('reset-password')
+  async resetPassword(@Body() body: any) {
+    return this.authService.resetPassword(
+      body,
+    )
   }
 }

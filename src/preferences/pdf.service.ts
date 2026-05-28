@@ -53,8 +53,8 @@ export class PdfService {
 
       doc.fontSize(12);
 
-      doc.text(`JEE Main Rank: ${profile.mainCategoryRank}`);
-      doc.text(`JEE Advanced Rank: ${profile.advCategoryRank}`);
+      doc.text(`JEE Mains Category Rank: ${profile.mainCategoryRank}`);
+      doc.text(`JEE Advanced Category Rank: ${profile.advCategoryRank}`);
       doc.text(`Category: ${profile.category}`);
       doc.text(`Home State: ${profile.homeState}`);
       doc.text(`Gender: ${profile.gender}`);

@@ -7,65 +7,56 @@ from ranking_engine import generate_personalized_rankings
 # =========================================
 # READ INPUT
 # =========================================
-
 raw_input = sys.stdin.read()
-
-print("INPUT RECEIVED", file=sys.stderr)
-
 input_data = json.loads(raw_input)
 
 # =========================================
 # EXTRACT DATA
 # =========================================
-
 profile = input_data.get("profile", {})
 weights = input_data.get("weights", {})
 branches = input_data.get("branches", [])
 dataset = input_data.get("dataset", [])
 
-# =========================================
-# DATAFRAME
-# =========================================
-
 df = pd.DataFrame(dataset)
 
-print(df.columns.tolist(), file=sys.stderr)
+# =========================================
+# PROFILE NORMALIZATION (FIXED)
+# =========================================
+category_rank = profile.get("mainCategoryRank", 0)
+
+# safer rank handling (important fix)
+if category_rank is None:
+    category_rank = 0
 
 # =========================================
-# PROFILE NORMALIZATION
+# USER PREFERENCES (FIXED KEY CONSISTENCY)
 # =========================================
-
-profile["ranks"] = {
-    "main_crl": profile.get("mainCategoryRank", 0),
-    "main_cat": profile.get("mainCategoryRank", 0),
-    "adv_crl": profile.get("advCategoryRank", 0),
-    "adv_cat": profile.get("advCategoryRank", 0)
+user_preferences = {
+    "branches": branches,
+    "home_state": profile.get("homeState", "")
 }
 
-profile["category"] = profile.get("category", "OPEN")
-profile["gender"] = profile.get("gender", "Gender-Neutral")
-profile["home_state"] = profile.get("homeState", "")
+# =========================================
+# WEIGHTS SAFETY CHECK (IMPORTANT)
+# =========================================
+budget_weights = {
+    "branch": weights.get("branch", 34),
+    "prestige": weights.get("college", 33),
+    "location": weights.get("hometown", 33)
+}
 
 # =========================================
 # RUN ENGINE
 # =========================================
-
 result = generate_personalized_rankings(
     df,
-    {
-        "branches": branches,
-        "home_state": profile["homeState"]
-    },
-    {
-        "branch": weights["branch"],
-        "prestige": weights["college"],
-        "location": weights["hometown"]
-    },
-    profile["mainCategoryRank"]
+    user_preferences,
+    budget_weights,
+    category_rank   # FIXED (clean rank input)
 )
 
 # =========================================
-# OUTPUT JSON
+# OUTPUT
 # =========================================
-
 print(result.to_json(orient="records"))

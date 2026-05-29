@@ -13,13 +13,31 @@ model User {
   email     String   @unique
   mobile    String   @unique
   password  String
-
+  isPremium Boolean  @default(false)
   resetOtp       String?
   resetOtpExpiry DateTime?
-
   createdAt DateTime @default(now())
-
   recommendationHistories RecommendationHistory[]
+  payments                Payment[]
+}
+
+model Payment {
+  id                 String   @id @default(cuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  razorpayOrderId    String   @unique
+  razorpayPaymentId  String?
+
+  amount             Int
+  currency           String   @default("INR")
+  plan               String
+  status             String   @default("PENDING")
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model SeatRecord {
@@ -35,7 +53,6 @@ model SeatRecord {
   round       Int
   isPwd       String
   createdAt   DateTime @default(now())
-
   @@unique([institute, program, quota, seatType, gender, year, round, isPwd])
 }
 
@@ -65,64 +82,38 @@ model CutoffPrediction {
 
 model PreferenceProfile {
   id String @id @default(cuid())
-
   mainCategoryRank Int
-
   advCategoryRank Int?
-
   category String
-
   homeState String
-
   gender String
-
   hometownWeight Int
-
   collegeWeight Int
-
   branchWeight Int
-
   preferredBranches Json
-
   createdAt DateTime @default(now())
-
   generatedLists GeneratedList[]
-
   histories RecommendationHistory[]
 }
 
 model GeneratedList {
   id String @id @default(cuid())
-
   profileId String
-
   generatedResults Json
-
   totalResults Int
-
   createdAt DateTime @default(now())
-
   profile PreferenceProfile @relation(fields: [profileId], references: [id])
-
   histories RecommendationHistory[]
 }
 
 model RecommendationHistory {
   id String @id @default(cuid())
-
   userId String?
-
   profileId String?
-
   generatedListId String
-
   pdfUrl String?
-
   createdAt DateTime @default(now())
-
   user User? @relation(fields: [userId], references: [id])
-
   profile PreferenceProfile? @relation(fields: [profileId], references: [id])
-
   generatedList GeneratedList @relation(fields: [generatedListId], references: [id])
 }

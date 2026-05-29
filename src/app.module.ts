@@ -5,6 +5,7 @@ import {
   ThrottlerModule,
   ThrottlerGuard,
 } from '@nestjs/throttler';
+import { ConfigModule } from '@nestjs/config';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -14,9 +15,11 @@ import { SeatRecordsModule } from './seat-records/seat-records.module';
 import { FeesModule } from './fees/fees.module';
 import { PreferencesModule } from './preferences/preferences.module';
 import { PredictorModule } from './predictor/predictor.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
@@ -32,6 +35,7 @@ import { PredictorModule } from './predictor/predictor.module';
     FeesModule,
     PreferencesModule,
     PredictorModule,
+    PaymentsModule,
   ],
 
   providers: [

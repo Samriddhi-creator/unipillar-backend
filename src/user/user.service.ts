@@ -15,6 +15,7 @@ export class UserService {
         name: true,
         email: true,
         mobile: true,
+        isPremium: true,
         createdAt: true,
       },
     })

@@ -23,6 +23,7 @@ model User {
   csabAllocations         CsabAllocation[]
 
   recommendationHistories RecommendationHistory[]
+  payments                Payment[]
 }
 
 model UserProfile {
@@ -78,11 +79,11 @@ model PendingSignup {
   mobile    String   @unique
   password  String
   isPremium Boolean  @default(false)
+  otp       String
+  otpExpiry DateTime
   resetOtp       String?
   resetOtpExpiry DateTime?
   createdAt DateTime @default(now())
-  recommendationHistories RecommendationHistory[]
-  payments                Payment[]
 }
 
 model Payment {
@@ -102,9 +103,6 @@ model Payment {
   updatedAt          DateTime @updatedAt
 
   @@index([userId])
-  otp       String
-  otpExpiry DateTime
-  createdAt DateTime @default(now())
 }
 
 model SeatRecord {
@@ -183,40 +181,4 @@ model RecommendationHistory {
   user User? @relation(fields: [userId], references: [id])
   profile PreferenceProfile? @relation(fields: [profileId], references: [id])
   generatedList GeneratedList @relation(fields: [generatedListId], references: [id])
-}
-  id                String                  @id @default(cuid())
-  category          String
-  homeState         String
-  gender            String
-  hometownWeight    Int
-  collegeWeight     Int
-  branchWeight      Int
-  createdAt         DateTime                @default(now())
-  advCategoryRank   Int?
-  mainCategoryRank  Int
-  preferredBranches Json
-  generatedLists    GeneratedList[]
-  histories         RecommendationHistory[]
-}
-
-model GeneratedList {
-  id               String                  @id @default(cuid())
-  profileId        String
-  createdAt        DateTime                @default(now())
-  generatedResults Json
-  totalResults     Int
-  profile          PreferenceProfile       @relation(fields: [profileId], references: [id])
-  histories        RecommendationHistory[]
-}
-
-model RecommendationHistory {
-  id              String             @id @default(cuid())
-  userId          String?
-  profileId       String?
-  pdfUrl          String?
-  createdAt       DateTime           @default(now())
-  generatedListId String
-  generatedList   GeneratedList      @relation(fields: [generatedListId], references: [id])
-  profile         PreferenceProfile? @relation(fields: [profileId], references: [id])
-  user            User?              @relation(fields: [userId], references: [id])
 }

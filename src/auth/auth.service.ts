@@ -17,10 +17,154 @@ export class AuthService {
         private jwt: JwtService,
     ) { }
 
+    // ================= SEND SIGNUP OTP =================
+    async sendSignupOtp(data: any) {
+        const {
+            name,
+            email,
+            mobile,
+            password,
+        } = data
+
+        this.validatePassword(password)
+
+        const existingUser =
+            await this.prisma.user.findFirst({
+                where: {
+                    OR: [{ email }, { mobile }],
+                },
+            })
+
+        if (existingUser) {
+            throw new BadRequestException(
+                'User already exists',
+            )
+        }
+
+        const otp = Math.floor(
+            100000 + Math.random() * 900000,
+        ).toString()
+
+        const hashedOtp =
+            await bcrypt.hash(otp, 10)
+
+        const hashedPassword =
+            await bcrypt.hash(password, 10)
+
+        const expiry = new Date(
+            Date.now() + 10 * 60 * 1000,
+        )
+
+        await this.prisma.pendingSignup.upsert({
+            where: { email },
+            update: {
+                name,
+                mobile,
+                password: hashedPassword,
+                otp: hashedOtp,
+                otpExpiry: expiry,
+            },
+            create: {
+                name,
+                email,
+                mobile,
+                password: hashedPassword,
+                otp: hashedOtp,
+                otpExpiry: expiry,
+            },
+        })
+
+        const transporter =
+            nodemailer.createTransport({
+                service: 'gmail',
+                auth: {
+                    user: process.env.EMAIL_USER,
+                    pass: process.env.EMAIL_PASS,
+                },
+            })
+
+        await transporter.sendMail({
+            from: process.env.EMAIL_USER,
+            to: email,
+            subject: 'UniPillar Signup OTP',
+            html: `
+      <h2>Verify Your Email</h2>
+      <p>Your OTP is:</p>
+      <h1>${otp}</h1>
+      <p>Expires in 10 minutes.</p>
+    `,
+        })
+
+        return {
+            message:
+                'OTP sent successfully',
+        }
+    }
+
+    // ================= VERIFY SIGNUP OTP =================
+    async verifySignupOtp(data: any) {
+        const { email, otp } = data
+
+        const pendingUser =
+            await this.prisma.pendingSignup.findUnique({
+                where: { email },
+            })
+
+        if (!pendingUser) {
+            throw new BadRequestException(
+                'Signup request not found',
+            )
+        }
+
+        const isOtpValid =
+            await bcrypt.compare(
+                otp,
+                pendingUser.otp,
+            )
+
+        if (!isOtpValid) {
+            throw new BadRequestException(
+                'Invalid OTP',
+            )
+        }
+
+        if (
+            pendingUser.otpExpiry <
+            new Date()
+        ) {
+            throw new BadRequestException(
+                'OTP expired',
+            )
+        }
+
+        const user =
+            await this.prisma.user.create({
+                data: {
+                    name: pendingUser.name,
+                    email: pendingUser.email,
+                    mobile: pendingUser.mobile,
+                    password:
+                        pendingUser.password,
+                },
+            })
+
+        await this.prisma.pendingSignup.delete({
+            where: { email },
+        })
+
+        return {
+            message:
+                'Account created successfully',
+            user,
+        }
+    }
+
     // ================= SIGNUP =================
     async signup(data: any) {
         const { name, email, mobile, password } = data
+
         this.validatePassword(password)
+
         const existingUser =
             await this.prisma.user.findFirst({
                 where: {
@@ -66,6 +210,7 @@ export class AuthService {
                 'Invalid credentials',
             )
         }
+
         const isMatch = await bcrypt.compare(
             password,
             user.password,
@@ -108,7 +253,6 @@ export class AuthService {
             }
         }
 
-        // generate 6 digit otp
         // generate 6 digit otp
         const otp = Math.floor(
             100000 + Math.random() * 900000,
@@ -164,14 +308,14 @@ export class AuthService {
 
     // ================= VERIFY RESET OTP =================
     async verifyResetOtp(data: any) {
-        const { email, otp } = data;
+        const { email, otp } = data
 
         const user = await this.prisma.user.findUnique({
             where: { email },
-        });
+        })
 
         if (!user) {
-            throw new BadRequestException('User not found');
+            throw new BadRequestException('User not found')
         }
 
         const isOtpValid =
@@ -190,27 +334,30 @@ export class AuthService {
             !user.resetOtpExpiry ||
             user.resetOtpExpiry < new Date()
         ) {
-            throw new BadRequestException('OTP expired');
+            throw new BadRequestException('OTP expired')
         }
 
         return {
             message: 'OTP verified successfully',
-        };
+        }
     }
 
     // ================= RESET PASSWORD =================
     async resetPassword(data: any) {
-        const { email, password } = data;
+        const { email, password } = data
+
         this.validatePassword(password)
+
         const user = await this.prisma.user.findUnique({
             where: { email },
-        });
+        })
 
         if (!user) {
-            throw new BadRequestException('User not found');
+            throw new BadRequestException('User not found')
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword =
+            await bcrypt.hash(password, 10)
 
         await this.prisma.user.update({
             where: { email },
@@ -219,24 +366,23 @@ export class AuthService {
                 resetOtp: null,
                 resetOtpExpiry: null,
             },
-        });
+        })
 
         return {
             message: 'Password reset successful',
-        };
+        }
     }
 
     private validatePassword(
         password: string,
     ) {
         const passwordRegex =
-            /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/;
+            /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/
 
         if (!passwordRegex.test(password)) {
             throw new BadRequestException(
                 'Password must contain at least 8 characters, one uppercase letter, one lowercase letter, and one number',
-            );
+            )
         }
     }
-
 }

@@ -14,6 +14,32 @@ export class AuthController {
     private authService: AuthService,
   ) {}
 
+  // ---------------- SEND SIGNUP OTP ----------------
+  @Throttle({
+    default: {
+      limit: 3,
+      ttl: 60000,
+    },
+  })
+  @Post('send-signup-otp')
+  async sendSignupOtp(
+    @Body() body: any,
+  ) {
+    return this.authService.sendSignupOtp(
+      body,
+    )
+  }
+
+  // ---------------- VERIFY SIGNUP OTP ----------------
+  @Post('verify-signup-otp')
+  async verifySignupOtp(
+    @Body() body: any,
+  ) {
+    return this.authService.verifySignupOtp(
+      body,
+    )
+  }
+
   // ---------------- SIGNUP ----------------
   @Post('signup')
   async signup(@Body() body: any) {
@@ -46,7 +72,7 @@ export class AuthController {
     )
   }
 
-  // ---------------- VERIFY OTP ----------------
+  // ---------------- VERIFY RESET OTP ----------------
   @Post('verify-reset-otp')
   async verifyResetOtp(@Body() body: any) {
     return this.authService.verifyResetOtp(

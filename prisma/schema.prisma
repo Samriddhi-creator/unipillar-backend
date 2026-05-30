@@ -8,6 +8,70 @@ datasource db {
 }
 
 model User {
+  id                      String                  @id @default(cuid())
+  name                    String
+  email                   String                  @unique
+  mobile                  String                  @unique
+  password                String
+  createdAt               DateTime                @default(now())
+  resetOtp                String?
+  resetOtpExpiry          DateTime?
+
+  profile                 UserProfile?
+
+  josaaAllocations        JosaaAllocation[]
+  csabAllocations         CsabAllocation[]
+
+  recommendationHistories RecommendationHistory[]
+}
+
+model UserProfile {
+  id          String   @id @default(cuid())
+
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id])
+
+  category    String?
+  gender      String?
+  pwd         String?
+  homeState   String?
+
+  jeeMains    Int?
+  jeeAdvanced Int?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model JosaaAllocation {
+  id        String   @id @default(cuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  round     Int
+  college   String
+  branch    String
+  status    String
+
+  createdAt DateTime @default(now())
+}
+
+model CsabAllocation {
+  id        String   @id @default(cuid())
+
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+
+  round     Int
+  college   String
+  branch    String
+  status    String
+
+  createdAt DateTime @default(now())
+}
+
+model PendingSignup {
   id        String   @id @default(cuid())
   name      String
   email     String   @unique
@@ -38,6 +102,9 @@ model Payment {
   updatedAt          DateTime @updatedAt
 
   @@index([userId])
+  otp       String
+  otpExpiry DateTime
+  createdAt DateTime @default(now())
 }
 
 model SeatRecord {
@@ -116,4 +183,40 @@ model RecommendationHistory {
   user User? @relation(fields: [userId], references: [id])
   profile PreferenceProfile? @relation(fields: [profileId], references: [id])
   generatedList GeneratedList @relation(fields: [generatedListId], references: [id])
+}
+  id                String                  @id @default(cuid())
+  category          String
+  homeState         String
+  gender            String
+  hometownWeight    Int
+  collegeWeight     Int
+  branchWeight      Int
+  createdAt         DateTime                @default(now())
+  advCategoryRank   Int?
+  mainCategoryRank  Int
+  preferredBranches Json
+  generatedLists    GeneratedList[]
+  histories         RecommendationHistory[]
+}
+
+model GeneratedList {
+  id               String                  @id @default(cuid())
+  profileId        String
+  createdAt        DateTime                @default(now())
+  generatedResults Json
+  totalResults     Int
+  profile          PreferenceProfile       @relation(fields: [profileId], references: [id])
+  histories        RecommendationHistory[]
+}
+
+model RecommendationHistory {
+  id              String             @id @default(cuid())
+  userId          String?
+  profileId       String?
+  pdfUrl          String?
+  createdAt       DateTime           @default(now())
+  generatedListId String
+  generatedList   GeneratedList      @relation(fields: [generatedListId], references: [id])
+  profile         PreferenceProfile? @relation(fields: [profileId], references: [id])
+  user            User?              @relation(fields: [userId], references: [id])
 }

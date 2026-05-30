@@ -23,3 +23,15 @@ export class ResetPasswordDto {
   email: string
   newPassword: string
 }
+
+export class SignupOtpDto {
+  name: string
+  email: string
+  mobile: string
+  password: string
+}
+
+export class VerifySignupOtpDto {
+  email: string
+  otp: string
+}

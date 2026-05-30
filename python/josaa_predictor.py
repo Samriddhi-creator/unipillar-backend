@@ -65,6 +65,9 @@ def generate_master_predictions(
     exam_type
 ):
 
+    if df.empty:
+        return pd.DataFrame()
+
     # =========================
     # NORMALIZATION
     # =========================
@@ -90,14 +93,14 @@ def generate_master_predictions(
     ]
 
     for col in string_cols:
-
-        if col in df.columns:
-
-            df[col] = (
-                df[col]
-                .astype(str)
-                .str.strip()
-            )
+        if col not in df.columns:
+            df[col] = ''
+            
+        df[col] = (
+            df[col]
+            .astype(str)
+            .str.strip()
+        )
 
     # =========================
     # CATEGORY NORMALIZATION

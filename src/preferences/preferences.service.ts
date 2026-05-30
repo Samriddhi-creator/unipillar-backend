@@ -41,13 +41,22 @@ export class PreferencesService {
         // =========================================
         return new Promise((resolve, reject) => {
 
+            const pythonPath = process.env.PYTHON_CMD || 'python3';
             const py = spawn(
-                'python',
+                pythonPath,
                 ['-u', 'python/main.py'],
             );
 
             let output = '';
             let error = '';
+
+            py.on('error', (err) => {
+                console.error('Failed to spawn python for preferences:', err);
+                reject({
+                    message: `Python process error: ${err.message}`,
+                    error: err.message,
+                });
+            });
 
             // =========================================
             // 4. PYTHON STDOUT

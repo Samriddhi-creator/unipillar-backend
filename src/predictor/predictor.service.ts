@@ -84,7 +84,7 @@ export class PredictorService {
       // PYTHON EXECUTION
       // =========================
 
-      const pythonPath = 'python';
+      const pythonPath = process.env.PYTHON_CMD || 'python3';
 
       const scriptPath = path.join(
         process.cwd(),
@@ -92,23 +92,27 @@ export class PredictorService {
         'josaa_predictor.py',
       );
 
-      const py = spawn(
-        pythonPath,
-        [scriptPath],
-      );
-
-      let result = '';
-      let errorOutput = '';
-
-      py.stdout.on('data', (data) => {
-        result += data.toString();
-      });
-
-      py.stderr.on('data', (data) => {
-        errorOutput += data.toString();
-      });
-
       return await new Promise((resolve, reject) => {
+        const py = spawn(pythonPath, [scriptPath]);
+        
+        let result = '';
+        let errorOutput = '';
+
+        py.on('error', (err) => {
+          console.error('Failed to spawn python:', err);
+          reject({
+            status: 'error',
+            message: `Python process error: ${err.message}`,
+          });
+        });
+
+        py.stdout.on('data', (data) => {
+          result += data.toString();
+        });
+
+        py.stderr.on('data', (data) => {
+          errorOutput += data.toString();
+        });
 
         py.on('close', (code) => {
 

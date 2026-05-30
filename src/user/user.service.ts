@@ -18,13 +18,6 @@ export class UserService {
           orderBy: { round: 'asc' },
         },
       },
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        mobile: true,
-        isPremium: true,
-        createdAt: true,
     });
   }
 

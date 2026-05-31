@@ -23,7 +23,7 @@ import { PaymentsModule } from './payments/payments.module';
     ThrottlerModule.forRoot([
       {
         ttl: 60000,
-        limit: 5,
+        limit: 10,
       },
     ]),
 
@@ -45,4 +45,4 @@ import { PaymentsModule } from './payments/payments.module';
     },
   ],
 })
-export class AppModule {}
+export class AppModule { }

@@ -6,6 +6,7 @@ import {
 
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '../prisma/prisma.service'
+import { SmsService } from './sms.service'
 
 import * as bcrypt from 'bcrypt'
 import * as nodemailer from 'nodemailer'
@@ -15,6 +16,7 @@ export class AuthService {
     constructor(
         private prisma: PrismaService,
         private jwt: JwtService,
+        private smsService: SmsService,
     ) { }
 
     // ================= SEND SIGNUP OTP =================
@@ -28,17 +30,43 @@ export class AuthService {
 
         this.validatePassword(password)
 
-        const existingUser =
-            await this.prisma.user.findFirst({
+        const cleanEmail = email ? email.trim().toLowerCase() : '';
+        const cleanMobile = mobile ? mobile.replace(/[^0-9]/g, '') : '';
+        const suffix10 = cleanMobile.length >= 10 ? cleanMobile.slice(-10) : cleanMobile;
+
+        const orConditions: any[] = [];
+        if (cleanEmail) {
+            orConditions.push({ email: cleanEmail });
+        }
+        if (suffix10) {
+            orConditions.push({ mobile: { endsWith: suffix10 } });
+        }
+
+        let existingUser: any = null;
+        if (orConditions.length > 0) {
+            existingUser = await this.prisma.user.findFirst({
                 where: {
-                    OR: [{ email }, { mobile }],
+                    OR: orConditions,
                 },
-            })
+            });
+        }
 
         if (existingUser) {
             throw new BadRequestException(
                 'User already exists',
             )
+        }
+
+        // To avoid unique constraint violation in PendingSignup if mobile is already there with a different email
+        if (cleanMobile) {
+            const existingPending = await this.prisma.pendingSignup.findFirst({
+                where: { mobile: cleanMobile },
+            });
+            if (existingPending && existingPending.email !== cleanEmail) {
+                await this.prisma.pendingSignup.delete({
+                    where: { id: existingPending.id },
+                }).catch(() => {});
+            }
         }
 
         const otp = Math.floor(
@@ -56,19 +84,21 @@ export class AuthService {
         )
 
         await this.prisma.pendingSignup.upsert({
-            where: { email },
+            where: { email: cleanEmail },
             update: {
                 name,
-                mobile,
+                mobile: cleanMobile,
                 password: hashedPassword,
+                userType: data.userType || 'free',
                 otp: hashedOtp,
                 otpExpiry: expiry,
             },
             create: {
                 name,
-                email,
-                mobile,
+                email: cleanEmail,
+                mobile: cleanMobile,
                 password: hashedPassword,
+                userType: data.userType || 'free',
                 otp: hashedOtp,
                 otpExpiry: expiry,
             },
@@ -85,7 +115,7 @@ export class AuthService {
 
         await transporter.sendMail({
             from: process.env.EMAIL_USER,
-            to: email,
+            to: cleanEmail,
             subject: 'UniPillar Signup OTP',
             html: `
       <h2>Verify Your Email</h2>
@@ -94,6 +124,9 @@ export class AuthService {
       <p>Expires in 10 minutes.</p>
     `,
         })
+
+        // Also send OTP on phone/mobile number
+        await this.smsService.sendOtp(cleanMobile, otp)
 
         return {
             message:
@@ -104,10 +137,11 @@ export class AuthService {
     // ================= VERIFY SIGNUP OTP =================
     async verifySignupOtp(data: any) {
         const { email, otp } = data
+        const cleanEmail = email ? email.trim().toLowerCase() : '';
 
         const pendingUser =
             await this.prisma.pendingSignup.findUnique({
-                where: { email },
+                where: { email: cleanEmail },
             })
 
         if (!pendingUser) {
@@ -137,19 +171,47 @@ export class AuthService {
             )
         }
 
+        const cleanMobile = pendingUser.mobile ? pendingUser.mobile.replace(/[^0-9]/g, '') : '';
+        const suffix10 = cleanMobile.length >= 10 ? cleanMobile.slice(-10) : cleanMobile;
+
+        const orConditions: any[] = [];
+        if (cleanEmail) {
+            orConditions.push({ email: cleanEmail });
+        }
+        if (suffix10) {
+            orConditions.push({ mobile: { endsWith: suffix10 } });
+        }
+
+        let existingUser: any = null;
+        if (orConditions.length > 0) {
+            existingUser = await this.prisma.user.findFirst({
+                where: {
+                    OR: orConditions,
+                },
+            });
+        }
+
+        if (existingUser) {
+            throw new BadRequestException(
+                'User already exists',
+            )
+        }
+
         const user =
             await this.prisma.user.create({
                 data: {
                     name: pendingUser.name,
-                    email: pendingUser.email,
-                    mobile: pendingUser.mobile,
+                    email: cleanEmail,
+                    mobile: cleanMobile,
                     password:
                         pendingUser.password,
+                    userType: pendingUser.userType,
+                    isPremium: pendingUser.userType === 'premium',
                 },
             })
 
         await this.prisma.pendingSignup.delete({
-            where: { email },
+            where: { email: cleanEmail },
         })
 
         return {
@@ -165,12 +227,26 @@ export class AuthService {
 
         this.validatePassword(password)
 
-        const existingUser =
-            await this.prisma.user.findFirst({
+        const cleanEmail = email ? email.trim().toLowerCase() : '';
+        const cleanMobile = mobile ? mobile.replace(/[^0-9]/g, '') : '';
+        const suffix10 = cleanMobile.length >= 10 ? cleanMobile.slice(-10) : cleanMobile;
+
+        const orConditions: any[] = [];
+        if (cleanEmail) {
+            orConditions.push({ email: cleanEmail });
+        }
+        if (suffix10) {
+            orConditions.push({ mobile: { endsWith: suffix10 } });
+        }
+
+        let existingUser: any = null;
+        if (orConditions.length > 0) {
+            existingUser = await this.prisma.user.findFirst({
                 where: {
-                    OR: [{ email }, { mobile }],
+                    OR: orConditions,
                 },
-            })
+            });
+        }
 
         if (existingUser) {
             throw new BadRequestException(
@@ -184,9 +260,11 @@ export class AuthService {
         const user = await this.prisma.user.create({
             data: {
                 name,
-                email,
-                mobile,
+                email: cleanEmail,
+                mobile: cleanMobile,
                 password: hashedPassword,
+                userType: data.userType || 'free',
+                isPremium: (data.userType || 'free') === 'premium',
             },
         })
 
@@ -199,10 +277,22 @@ export class AuthService {
     // ================= LOGIN =================
     async login(data: any) {
         const { email, password } = data
+        const identifier = email?.trim() || ""
+        const cleanIdentifier = identifier.replace(/[^0-9]/g, '')
+        const suffix10 = cleanIdentifier.length >= 10 ? cleanIdentifier.slice(-10) : cleanIdentifier
+
+        const orConditions: any[] = [
+            { email: identifier.toLowerCase() }
+        ];
+        if (suffix10) {
+            orConditions.push({ mobile: { endsWith: suffix10 } });
+        }
 
         const user =
-            await this.prisma.user.findUnique({
-                where: { email },
+            await this.prisma.user.findFirst({
+                where: {
+                    OR: orConditions,
+                },
             })
 
         if (!user) {
@@ -235,15 +325,29 @@ export class AuthService {
                 name: user.name,
                 email: user.email,
                 isPremium: user.isPremium,
+                userType: user.userType,
             },
         }
     }
 
     // ================= FORGOT PASSWORD =================
     async forgotPassword(email: string) {
+        const identifier = email?.trim() || ""
+        const cleanIdentifier = identifier.replace(/[^0-9]/g, '')
+        const suffix10 = cleanIdentifier.length >= 10 ? cleanIdentifier.slice(-10) : cleanIdentifier
+
+        const orConditions: any[] = [
+            { email: identifier.toLowerCase() }
+        ];
+        if (suffix10) {
+            orConditions.push({ mobile: { endsWith: suffix10 } });
+        }
+
         const user =
-            await this.prisma.user.findUnique({
-                where: { email },
+            await this.prisma.user.findFirst({
+                where: {
+                    OR: orConditions,
+                },
             })
 
         // Prevent email enumeration
@@ -259,6 +363,10 @@ export class AuthService {
             100000 + Math.random() * 900000,
         ).toString()
 
+        console.log(`\n====================================`);
+        console.log(`[FORGOT PASSWORD OTP] for ${user.email} / ${user.mobile}: ${otp}`);
+        console.log(`====================================\n`);
+
         // HASH OTP
         const hashedOtp = await bcrypt.hash(
             otp,
@@ -271,7 +379,7 @@ export class AuthService {
         )
 
         await this.prisma.user.update({
-            where: { email },
+            where: { id: user.id },
             data: {
                 resetOtp: hashedOtp,
                 resetOtpExpiry: expiry,
@@ -289,17 +397,25 @@ export class AuthService {
             })
 
         // send email
-        await transporter.sendMail({
-            from: process.env.EMAIL_USER,
-            to: email,
-            subject: 'UniPillar Password Reset OTP',
-            html: `
-        <h2>UniPillar Password Reset</h2>
-        <p>Your OTP is:</p>
-        <h1>${otp}</h1>
-        <p>This OTP expires in 10 minutes.</p>
-      `,
-        })
+        if (user.email) {
+            await transporter.sendMail({
+                from: process.env.EMAIL_USER,
+                to: user.email,
+                subject: 'UniPillar Password Reset OTP',
+                html: `
+            <h2>UniPillar Password Reset</h2>
+            <p>Your OTP is:</p>
+            <h1>${otp}</h1>
+            <p>This OTP expires in 10 minutes.</p>
+          `,
+            }).catch(e => console.error('Failed to send reset email:', e))
+        }
+
+        // send SMS
+        if (user.mobile) {
+            await this.smsService.sendOtp(user.mobile, otp)
+                .catch(e => console.error('Failed to send reset SMS:', e))
+        }
 
         return {
             message:
@@ -310,9 +426,21 @@ export class AuthService {
     // ================= VERIFY RESET OTP =================
     async verifyResetOtp(data: any) {
         const { email, otp } = data
+        const identifier = email?.trim() || ""
+        const cleanIdentifier = identifier.replace(/[^0-9]/g, '')
+        const suffix10 = cleanIdentifier.length >= 10 ? cleanIdentifier.slice(-10) : cleanIdentifier
 
-        const user = await this.prisma.user.findUnique({
-            where: { email },
+        const orConditions: any[] = [
+            { email: identifier.toLowerCase() }
+        ];
+        if (suffix10) {
+            orConditions.push({ mobile: { endsWith: suffix10 } });
+        }
+
+        const user = await this.prisma.user.findFirst({
+            where: {
+                OR: orConditions,
+            },
         })
 
         if (!user) {
@@ -346,11 +474,23 @@ export class AuthService {
     // ================= RESET PASSWORD =================
     async resetPassword(data: any) {
         const { email, password } = data
+        const identifier = email?.trim() || ""
+        const cleanIdentifier = identifier.replace(/[^0-9]/g, '')
+        const suffix10 = cleanIdentifier.length >= 10 ? cleanIdentifier.slice(-10) : cleanIdentifier
 
         this.validatePassword(password)
 
-        const user = await this.prisma.user.findUnique({
-            where: { email },
+        const orConditions: any[] = [
+            { email: identifier.toLowerCase() }
+        ];
+        if (suffix10) {
+            orConditions.push({ mobile: { endsWith: suffix10 } });
+        }
+
+        const user = await this.prisma.user.findFirst({
+            where: {
+                OR: orConditions,
+            },
         })
 
         if (!user) {
@@ -361,7 +501,7 @@ export class AuthService {
             await bcrypt.hash(password, 10)
 
         await this.prisma.user.update({
-            where: { email },
+            where: { id: user.id },
             data: {
                 password: hashedPassword,
                 resetOtp: null,

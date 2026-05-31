@@ -112,7 +112,7 @@ export class PaymentsService {
             }),
             this.prisma.user.update({
                 where: { id: userId },
-                data: { isPremium: true },
+                data: { isPremium: true, userType: 'premium' },
             }),
         ]);
 
@@ -153,7 +153,7 @@ export class PaymentsService {
                     }),
                     this.prisma.user.update({
                         where: { id: existing.userId },
-                        data: { isPremium: true },
+                        data: { isPremium: true, userType: 'premium' },
                     }),
                 ]);
                 this.logger.log(`Webhook: activated premium for user ${existing.userId}`);

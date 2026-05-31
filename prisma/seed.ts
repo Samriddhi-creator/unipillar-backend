@@ -46,62 +46,36 @@ async function seedSeatRecords() {
   })
 
   console.log(`SeatRecord CSV rows loaded: ${results.length}`)
-  console.log(Object.keys(results[0]))
 
   const formatted = results.map((row) => ({
-    institute:   row['Institute'] || row['﻿Institute'],
-    program:     row['Academic Program Name'],
-    quota:       row['Quota'],
-    seatType:    row['Seat Type'],
-    gender:      row['Gender'],
-    year:        Number(row['Year']),
+    institute: row['Institute'] || row['Institute'],
+    program: row['Academic Program Name'],
+    quota: row['Quota'],
+    seatType: row['Seat Type'],
+    gender: row['Gender'],
+    year: Number(row['Year']),
     openingRank: Number(row['Opening Rank']),
     closingRank: Number(row['Closing Rank']),
-    round:       Number(row['Round']),
-    isPwd:       row['isPwd'],
+    round: Number(row['Round']),
+    isPwd: row['isPwd'],
   }))
 
-  let inserted = 0
-  let skipped = 0
-  const batchSize = 500
+  console.log("Pusher activated: Writing SeatRecords to Neon Cloud via createMany...")
 
+  // High-performance batching chunk
+  const batchSize = 5000
   for (let i = 0; i < formatted.length; i += batchSize) {
     const batch = formatted.slice(i, i + batchSize)
 
-    const batchResults = await Promise.all(
-      batch.map((row) =>
-        prisma.seatRecord
-          .upsert({
-            where: {
-              institute_program_quota_seatType_gender_year_round_isPwd: {
-                institute:   row.institute,
-                program:     row.program,
-                quota:       row.quota,
-                seatType:    row.seatType,
-                gender:      row.gender,
-                year:        row.year,
-                round:       row.round,
-                isPwd:       row.isPwd,
-              },
-            },
-            update: {
-              openingRank: row.openingRank,
-              closingRank: row.closingRank,
-            },
-            create: row,
-          })
-          .then(() => 'inserted')
-          .catch(() => 'skipped')
-      )
-    )
+    await prisma.seatRecord.createMany({
+      data: batch,
+      skipDuplicates: true, // Safe processing: automatically skips rows already in the database
+    })
 
-    inserted += batchResults.filter((r) => r === 'inserted').length
-    skipped  += batchResults.filter((r) => r === 'skipped').length
-
-    if (i % 5000 === 0) console.log(`SeatRecord progress: ${i}/${formatted.length}`)
+    console.log(`SeatRecord progress: ${Math.min(i + batchSize, formatted.length)}/${formatted.length}`)
   }
 
-  console.log(`SeatRecord done — inserted/updated: ${inserted}, skipped: ${skipped}`)
+  console.log(`SeatRecord done!`)
 }
 
 // ── seed college fees ─────────────────────────────────────────────────────────
@@ -120,30 +94,27 @@ async function seedCollegeFees() {
 
   console.log(`CollegeFee CSV rows loaded: ${results.length}`)
 
-  let inserted = 0
-  let skipped = 0
+  const formattedFees: any[] = []
 
   for (const row of results) {
-    const collegeName      = (row['CollegeName'] || '').trim()
+    const collegeName = (row['CollegeName'] || '').trim()
     const collegeShortName = (row['CollegeShortName'] || '').trim()
-    const fees             = parseAmount(row['Fees'] || '0')
-    const instType         = detectType(collegeName, collegeShortName)
+    const fees = parseAmount(row['Fees'] || '0')
+    const instType = detectType(collegeName, collegeShortName)
 
     if (!collegeName || !collegeShortName || fees === 0) {
-      skipped++
       continue
     }
 
-    await prisma.collegeFee.upsert({
-      where:  { collegeShortName },
-      update: { collegeName, fees, instType },
-      create: { collegeName, collegeShortName, fees, instType },
-    })
-
-    inserted++
+    formattedFees.push({ collegeName, collegeShortName, fees, instType })
   }
 
-  console.log(`CollegeFee done — inserted/updated: ${inserted}, skipped: ${skipped}`)
+  await prisma.collegeFee.createMany({
+    data: formattedFees,
+    skipDuplicates: true,
+  })
+
+  console.log(`CollegeFee done!`)
 }
 
 // ── seed cutoff predictions ──────────────────────────────────────────────────
@@ -167,61 +138,46 @@ async function seedCutoffPredictions() {
 
   console.log(`CutoffPrediction CSV rows loaded: ${results.length}`)
 
-  let inserted = 0
-  let skipped = 0
-  const batchSize = 500
+  const formattedPredictions = results.map((row) => {
+    const institute = row['Institute'] || ''
+    const branchShortcut = row['branch_shortcut'] || ''
+    const quota = row['Quota'] || ''
+    const seatType = row['Seat Type'] || ''
+    const gender = row['Gender'] || ''
 
-  for (let i = 0; i < results.length; i += batchSize) {
-    const batch = results.slice(i, i + batchSize)
+    const idId = `${institute}-${branchShortcut}-${quota}-${seatType}-${gender}`.replace(/\s+/g, '-').substring(0, 190)
 
-    const batchResults = await Promise.all(
-      batch.map((row) => {
-        const institute = row['Institute'] || ''
-        const branchShortcut = row['branch_shortcut'] || ''
-        const quota = row['Quota'] || ''
-        const seatType = row['Seat Type'] || ''
-        const gender = row['Gender'] || ''
-        
-        // Generate a deterministic ID based on unique fields to allow upsert
-        const idId = `${institute}-${branchShortcut}-${quota}-${seatType}-${gender}`.replace(/\s+/g, '-').substring(0, 190)
+    return {
+      id: idId,
+      institute: institute,
+      collegeState: row['college_state'] || null,
+      branchShortcut: branchShortcut,
+      degreeType: row['degree_type'] || null,
+      quota: quota,
+      seatType: seatType,
+      gender: gender,
+      predictedClosingRank2026: Number(row['predicted_closing_rank_2026']) || 0,
+      instituteType: row['institute_type'] || null,
+      globalPrestigeIndex: parseFloat(row['Global_Prestige_Index']) || 0,
+      globalBranchPopularity: parseFloat(row['Global_Branch_Popularity']) || 0,
+    }
+  })
 
-        return prisma.cutoffPrediction
-          .upsert({
-            where: { id: idId },
-            update: {
-              predictedClosingRank2026: Number(row['predicted_closing_rank_2026']) || 0,
-              globalPrestigeIndex: parseFloat(row['Global_Prestige_Index']) || 0,
-              globalBranchPopularity: parseFloat(row['Global_Branch_Popularity']) || 0,
-            },
-            create: {
-              id: idId,
-              institute: institute,
-              collegeState: row['college_state'],
-              branchShortcut: branchShortcut,
-              degreeType: row['degree_type'],
-              quota: quota,
-              seatType: seatType,
-              gender: gender,
-              predictedClosingRank2026: Number(row['predicted_closing_rank_2026']) || 0,
-              instituteType: row['institute_type'],
-              globalPrestigeIndex: parseFloat(row['Global_Prestige_Index']) || 0,
-              globalBranchPopularity: parseFloat(row['Global_Branch_Popularity']) || 0,
-            },
-          })
-          .then(() => 'inserted')
-          .catch((err) => {
-             return 'skipped'
-          })
-      })
-    )
+  console.log("Pusher activated: Writing CutoffPredictions to Neon Cloud via createMany...")
 
-    inserted += batchResults.filter((r) => r === 'inserted').length
-    skipped  += batchResults.filter((r) => r === 'skipped').length
+  const batchSize = 5000
+  for (let i = 0; i < formattedPredictions.length; i += batchSize) {
+    const batch = formattedPredictions.slice(i, i + batchSize)
 
-    if (i % 5000 === 0 && i > 0) console.log(`CutoffPrediction progress: ${i}/${results.length}`)
+    await prisma.cutoffPrediction.createMany({
+      data: batch,
+      skipDuplicates: true,
+    })
+
+    console.log(`CutoffPrediction progress: ${Math.min(i + batchSize, formattedPredictions.length)}/${formattedPredictions.length}`)
   }
 
-  console.log(`CutoffPrediction done — inserted/updated: ${inserted}, skipped: ${skipped}`)
+  console.log(`CutoffPrediction done!`)
 }
 
 // ── main ──────────────────────────────────────────────────────────────────────
